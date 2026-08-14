@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+# Read-only: this workflow validates the build, it never deploys.
+permissions:
+  contents: read
+
+# One run per PR; superseded pushes are cancelled to save runner time.
+# (Unlike the Pages deploy, cancelling here is safe -- nothing is published.)
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  build:
+    name: Build (Next.js + Docusaurus)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            docs/package-lock.json
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Lint web
+        working-directory: web
+        run: npm run lint
+
+      - name: Build web (static export -> web/out)
+        working-directory: web
+        run: npm run build
+
+      - name: Install docs dependencies
+        working-directory: docs
+        run: npm ci
+
+      - name: Typecheck docs
+        working-directory: docs
+        run: npm run typecheck
+
+      - name: Build docs (-> docs/build)
+        working-directory: docs
+        run: npm run build
+
+      # Mirror the deploy-time merge so a PR fails here rather than on main.
+      - name: Merge docs into web export
+        run: |
+          set -euo pipefail
+          mkdir -p web/out/docs
+          cp -R docs/build/. web/out/docs/
+          touch web/out/.nojekyll
+
+      - name: Verify merged artifact
+        run: |
+          set -euo pipefail
+
+          echo "::group::web/out (top level)"
+          ls -la web/out
+          echo "::endgroup::"
+
+          missing=0
+          for f in \
+            web/out/index.html \
+            web/out/docs/index.html \
+            web/out/.nojekyll \
+            web/out/CNAME
+          do
+            if [ -e "$f" ]; then
+              echo "ok       $f"
+            else
+              echo "MISSING  $f"
+              missing=1
+            fi
+          done
+
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::Merged artifact is incomplete - this PR would break the deploy."
+            exit 1
+          fi
+
+          echo "Artifact verified."

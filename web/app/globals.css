@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+/*
+  Design tokens.
+
+  Light is the base definition; the dark set is swapped in by
+  `prefers-color-scheme`, which is the same signal Tailwind v4's `dark:`
+  variant keys off — so tokens and variants can never disagree.
+
+  No @font-face and no font CDN: the site rides Tailwind's system font
+  stacks so it stays fully self-contained for a static Pages deploy.
+*/
+:root {
+  color-scheme: light;
+
+  --background: #ffffff;
+  --surface: #fafafa;
+  --foreground: #18181b;
+  --muted: #57575f;
+  --line: #e4e4e7;
+  --accent: #0f62d6;
+  /* Text/icon colour placed ON a filled accent surface. It has to flip with
+     the theme: the light-mode accent is dark enough for white, the dark-mode
+     accent is a light blue that needs near-black on top of it. */
+  --on-accent: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --background: #08080a;
+    --surface: #0e0e11;
+    --foreground: #ededf0;
+    --muted: #9d9da8;
+    --line: #232329;
+    --accent: #6aa6ff;
+    --on-accent: #06070a;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  /* Hard guarantee against a horizontally scrolling document on narrow
+     viewports; wide content (code blocks) scrolls inside its own container. */
+  overflow-x: hidden;
+}
+
+::selection {
+  background-color: color-mix(in oklab, var(--accent) 26%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}

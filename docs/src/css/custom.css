@@ -1,0 +1,39 @@
+/**
+ * Global styles for the Zynax documentation site.
+ * The classic theme bundles Infima; these overrides set the Zynax palette.
+ */
+
+:root {
+  --ifm-color-primary: #026be0;
+  --ifm-color-primary-dark: #0260ca;
+  --ifm-color-primary-darker: #025bbf;
+  --ifm-color-primary-darkest: #024b9d;
+  --ifm-color-primary-light: #0f7bf5;
+  --ifm-color-primary-lighter: #2287f6;
+  --ifm-color-primary-lightest: #4d9ef8;
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+}
+
+/* A lighter primary keeps contrast readable on dark backgrounds. */
+[data-theme='dark'] {
+  --ifm-color-primary: #4d9ef8;
+  --ifm-color-primary-dark: #2b8bf7;
+  --ifm-color-primary-darker: #1a81f6;
+  --ifm-color-primary-darkest: #0768d6;
+  --ifm-color-primary-light: #6fb1f9;
+  --ifm-color-primary-lighter: #80bafa;
+  --ifm-color-primary-lightest: #b3d5fc;
+  --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.1);
+}
+
+/* Tables in the reference pages carry a lot of the content — give them room. */
+.markdown table {
+  display: table;
+  width: 100%;
+}
+
+.markdown table th,
+.markdown table td {
+  vertical-align: top;
+}

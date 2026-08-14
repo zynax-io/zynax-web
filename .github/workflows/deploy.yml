@@ -1,0 +1,146 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# GITHUB_TOKEN permissions required by the official Pages deployment:
+#   contents: read   -> check out the repository
+#   pages:    write   -> create and publish a Pages deployment
+#   id-token: write   -> mint the OIDC token that actions/deploy-pages exchanges
+#                        to prove the artifact really came from this workflow run
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Serialize Pages deployments. cancel-in-progress is deliberately false:
+# killing a half-finished deployment can leave the live site in a broken
+# intermediate state, so newer runs queue behind the running one instead.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  build:
+    name: Build (Next.js + Docusaurus)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          # web/ and docs/ are two independent npm projects with separate
+          # lockfiles. Hash BOTH so the cache key rotates when either changes.
+          cache-dependency-path: |
+            web/package-lock.json
+            docs/package-lock.json
+
+      # Sets up the Pages deployment context and exposes the site origin.
+      # Run it before the builds so the site config can consult it if needed.
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          # Provision the Pages site on first run instead of failing with
+          # "Get Pages site failed". Idempotent on every subsequent run.
+          enablement: true
+
+      # ---- Marketing site: web/ -> web/out ----
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Build web (static export -> web/out)
+        working-directory: web
+        run: npm run build
+
+      # ---- Docs site: docs/ -> docs/build ----
+      - name: Install docs dependencies
+        working-directory: docs
+        run: npm ci
+
+      - name: Build docs (-> docs/build)
+        working-directory: docs
+        run: npm run build
+
+      # ---- Merge the two builds into a single artifact rooted at web/out ----
+      - name: Merge docs into web export
+        run: |
+          set -euo pipefail
+          mkdir -p web/out/docs
+          # Trailing "/." copies the directory *contents* (including dotfiles)
+          # rather than nesting docs/build inside web/out/docs.
+          cp -R docs/build/. web/out/docs/
+          # CRITICAL: without .nojekyll, GitHub Pages pipes the upload through
+          # Jekyll, which silently strips every path starting with an
+          # underscore -- including Next.js's _next/ bundle directory. The
+          # deploy would report success while the live site loads with zero
+          # CSS and zero JS. Do not remove this line.
+          touch web/out/.nojekyll
+
+      - name: Verify merged artifact
+        run: |
+          set -euo pipefail
+
+          echo "::group::web/out (top level)"
+          ls -la web/out
+          echo "::endgroup::"
+
+          echo "::group::web/out/docs (top level)"
+          ls -la web/out/docs
+          echo "::endgroup::"
+
+          missing=0
+          for f in \
+            web/out/index.html \
+            web/out/docs/index.html \
+            web/out/.nojekyll \
+            web/out/CNAME
+          do
+            if [ -e "$f" ]; then
+              echo "ok       $f"
+            else
+              echo "MISSING  $f"
+              missing=1
+            fi
+          done
+
+          if [ "$missing" -ne 0 ]; then
+            echo
+            echo "Hints:"
+            echo "  index.html      -> web/next.config.ts needs output: 'export'"
+            echo "  docs/index.html -> docusaurus.config.ts needs baseUrl: '/docs/'"
+            echo "  CNAME           -> web/public/CNAME must contain 'zynax.io'"
+            echo "::error::Merged Pages artifact is incomplete - refusing to deploy."
+            exit 1
+          fi
+
+          echo "Artifact verified."
+
+      # Tars web/out and uploads it as the single artifact Pages will publish.
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/out
+
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    # The github-pages environment is what actually gates and records the
+    # deployment; `url` surfaces the live link in the Actions/Deployments UI.
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
