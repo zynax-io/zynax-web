@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next";
-import "./globals.css";
 
-const SITE_URL = "https://zynax.io";
+import { Analytics } from "./analytics";
+import { SITE_URL } from "./site";
+import "./globals.css";
 
 const TITLE = "Zynax — the engine-portability layer for agentic automation";
 
@@ -72,7 +73,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className="h-full antialiased">
-      <body className="flex min-h-full flex-col font-sans">{children}</body>
+      <body className="flex min-h-full flex-col font-sans">
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }

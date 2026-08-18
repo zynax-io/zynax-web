@@ -70,6 +70,69 @@ Three constraints are load-bearing and must not be changed casually:
 - **Empty `basePath`.** The site is served from an apex custom domain, so the root
   is `/`. A `basePath` of `/zynax-web` would 404 every asset.
 
+## Analytics
+
+Visits are tracked with [Umami](https://umami.is) — open source (AGPL-3.0),
+cookieless, and free on the hosted tier. It stores no cookies and no cross-site
+identifiers, so **zynax.io needs no consent banner** under GDPR/ePrivacy.
+
+Both halves of the domain report into **one** Umami website, so `/` and `/docs/`
+show up as pages of the same property rather than two disconnected sites:
+
+| Half     | Injected by                 |
+| -------- | --------------------------- |
+| `/`      | `web/app/analytics.tsx`     |
+| `/docs/` | `scripts` in `docs/docusaurus.config.ts` |
+
+### One-time setup
+
+1. Create an account at [cloud.umami.is](https://cloud.umami.is) and add a
+   website with domain `zynax.io`.
+2. Copy its **Website ID** (a UUID, under Settings → Websites).
+3. In this repo: **Settings → Secrets and variables → Actions → Variables →
+   New repository variable**, named `UMAMI_WEBSITE_ID` with that UUID.
+
+A *variable*, not a secret — the ID ships in the HTML of every page, so there is
+nothing to hide, and secrets are masked in logs which would break the deploy's
+verification step.
+
+The next push to `main` deploys with tracking on. The deploy workflow fails if
+`UMAMI_WEBSITE_ID` is set but no tracker reaches the artifact, so analytics
+cannot break silently.
+
+### Configuration
+
+Both apps read the same three settings; the Next.js side needs the
+`NEXT_PUBLIC_` prefix because that is what Next inlines into the client bundle.
+
+| Next.js (`web/`)               | Docusaurus (`docs/`) | Effect                                                     |
+| ------------------------------ | -------------------- | ---------------------------------------------------------- |
+| `NEXT_PUBLIC_UMAMI_WEBSITE_ID` | `UMAMI_WEBSITE_ID`   | Required. Unset ⇒ no tracker emitted at all.               |
+| `NEXT_PUBLIC_UMAMI_SCRIPT_URL` | `UMAMI_SCRIPT_URL`   | Defaults to Umami Cloud. Repoint to self-host.              |
+| `NEXT_PUBLIC_UMAMI_DOMAINS`    | `UMAMI_DOMAINS`      | Hostname allow-list, defaults to `zynax.io`. `""` disables. |
+
+Everything is resolved at **build time** — `output: 'export'` means there is no
+server to read configuration at request time.
+
+Because the ID is unset by default, `npm run dev`, local production builds and
+pull-request builds emit no tracker and never touch production statistics. The
+`data-domains` allow-list is the second line of defence: a stray copy of the
+export served from anywhere other than `zynax.io` sends nothing.
+
+To exercise the tracker locally, supply both:
+
+```bash
+cd web
+NEXT_PUBLIC_UMAMI_WEBSITE_ID=<uuid> NEXT_PUBLIC_UMAMI_DOMAINS= npm run dev
+```
+
+### Moving off the hosted tier
+
+Umami is self-hostable and the tracker is the same script either way, so
+switching is a change of `UMAMI_SCRIPT_URL` to `https://<your-instance>/script.js`
+and nothing else. Swapping providers entirely touches only the two files in the
+table above.
+
 ## Contributing
 
 Work on a branch, then open a pull request against `main`.
