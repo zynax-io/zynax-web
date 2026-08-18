@@ -23,6 +23,33 @@ const HOME_LINK = {
   target: '_self',
 } as const;
 
+/* --------------------------------------------------------------------------
+ * Umami — cookieless visit analytics
+ *
+ * The Next.js landing page injects the exact same tracker from
+ * `web/app/analytics.tsx` against the same website ID, so `/` and `/docs/`
+ * report into one Umami property instead of two half-pictures.
+ *
+ * Configuration is read from the environment at build time (this file runs in
+ * Node during `docusaurus build`). Unlike the Next.js side there is no
+ * `NEXT_PUBLIC_` prefix to honour, so the variables are unprefixed:
+ *
+ *   UMAMI_WEBSITE_ID   required to enable tracking; the UUID from Umami's
+ *                      Settings -> Websites. Public, not a secret.
+ *   UMAMI_SCRIPT_URL   optional; defaults to Umami Cloud. Repoint to self-host.
+ *   UMAMI_DOMAINS      optional; defaults to the production hostname. Set it to
+ *                      "" to drop the allow-list when testing from localhost.
+ *
+ * With the ID unset — `npm start`, `npm run build` on a laptop, pull-request
+ * builds — no script tag is emitted and no data leaves the machine.
+ * ------------------------------------------------------------------------ */
+const UMAMI_WEBSITE_ID = process.env.UMAMI_WEBSITE_ID;
+const UMAMI_SCRIPT_URL =
+  process.env.UMAMI_SCRIPT_URL || 'https://cloud.umami.is/script.js';
+// `??` not `||`: an explicitly empty value means "no allow-list", an absent one
+// means "use the production default".
+const UMAMI_DOMAINS = process.env.UMAMI_DOMAINS ?? 'zynax.io';
+
 const config: Config = {
   title: 'Zynax',
   tagline:
@@ -58,6 +85,23 @@ const config: Config = {
     defaultLocale: 'en',
     locales: ['en'],
   },
+
+  /**
+   * Injected into the <head> of every docs page. `defer` keeps the tracker off
+   * the critical rendering path; Umami hooks the History API itself, so
+   * client-side navigation inside the Docusaurus SPA is counted without any
+   * extra wiring.
+   */
+  scripts: UMAMI_WEBSITE_ID
+    ? [
+        {
+          src: UMAMI_SCRIPT_URL,
+          defer: true,
+          'data-website-id': UMAMI_WEBSITE_ID,
+          ...(UMAMI_DOMAINS ? {'data-domains': UMAMI_DOMAINS} : {}),
+        },
+      ]
+    : [],
 
   presets: [
     [

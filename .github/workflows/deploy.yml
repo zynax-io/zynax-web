@@ -25,6 +25,17 @@ concurrency:
 env:
   NODE_VERSION: "22"
 
+  # Umami visit analytics. Both are repository *variables* (Settings ->
+  # Secrets and variables -> Actions -> Variables), not secrets: the website ID
+  # ships in the HTML of every page, so hiding it would buy nothing.
+  #
+  # Unset UMAMI_WEBSITE_ID -> neither build emits a tracker and the site
+  # deploys with no analytics at all, which is the correct behaviour for a fork.
+  # UMAMI_SCRIPT_URL is only needed to point at a self-hosted Umami instance;
+  # empty falls back to Umami Cloud.
+  UMAMI_WEBSITE_ID: ${{ vars.UMAMI_WEBSITE_ID }}
+  UMAMI_SCRIPT_URL: ${{ vars.UMAMI_SCRIPT_URL }}
+
 jobs:
   build:
     name: Build (Next.js + Docusaurus)
@@ -60,6 +71,12 @@ jobs:
 
       - name: Build web (static export -> web/out)
         working-directory: web
+        # Next.js only inlines variables prefixed with NEXT_PUBLIC_ into the
+        # client bundle, so the job-level values are re-exported under that
+        # prefix here. See web/app/analytics.tsx.
+        env:
+          NEXT_PUBLIC_UMAMI_WEBSITE_ID: ${{ env.UMAMI_WEBSITE_ID }}
+          NEXT_PUBLIC_UMAMI_SCRIPT_URL: ${{ env.UMAMI_SCRIPT_URL }}
         run: npm run build
 
       # ---- Docs site: docs/ -> docs/build ----
@@ -121,6 +138,22 @@ jobs:
             echo "  CNAME           -> web/public/CNAME must contain 'zynax.io'"
             echo "::error::Merged Pages artifact is incomplete - refusing to deploy."
             exit 1
+          fi
+
+          # Analytics is configured but silent -> fail loudly. Without this the
+          # only symptom of a dropped <Analytics /> or a renamed env var is a
+          # dashboard that quietly reads zero, which nobody notices for weeks.
+          if [ -n "${UMAMI_WEBSITE_ID:-}" ]; then
+            for half in web/out/index.html web/out/docs/index.html; do
+              if grep -q "$UMAMI_WEBSITE_ID" "$half"; then
+                echo "ok       umami tracker in $half"
+              else
+                echo "::error::UMAMI_WEBSITE_ID is set but no tracker was emitted into $half."
+                exit 1
+              fi
+            done
+          else
+            echo "note     UMAMI_WEBSITE_ID unset - deploying without analytics."
           fi
 
           echo "Artifact verified."
